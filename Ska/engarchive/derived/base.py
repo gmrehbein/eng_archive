@@ -80,8 +80,14 @@ class DerivedParameter(object):
             if (data.vals.dtype.name == 'string24'
                 and set(data.vals) == set(('ON ', 'OFF'))):
                 data.vals = np.where(data.vals == 'OFF', np.int8(0), np.int8(1))
-                    
+
         dataset.interpolate(dt=self.time_step)
+
+        # Manually force the "correct" value (from a thermal/power perspective)
+        # for 4OHTRZ50.  This is different from what comes in telemetry.
+        if '4OHTRZ50' in dataset:
+            stuck_on = get_4OHTRZ50_stuck_on(dataset)
+            dataset['4OHTRZ50'].vals[stuck_on] = 1
 
         # Return calculated values.  Np.asarray will copy the array only if
         # dtype is not None and different from vals.dtype; otherwise a
@@ -96,3 +102,21 @@ class DerivedParameter(object):
     @property
     def content(self):
         return 'dp_{}{}'.format(self.content_root.lower(), self.mnf_step)
+
+
+def get_4OHTRZ50_stuck_on(msidset):
+    '''Set actual heater bilevel given stuck on behavior.
+
+    On 2003:363 the telescope Zone 50 heater became stuck on. This heater
+    became temporarily unstuck for approximately 14 hours on 2006:363.
+    This heater has remained stuck on since this most recent event.
+    '''
+
+    tstuck1 = DateTime('2003:356:00:21:38').secs
+    tunstuck = DateTime('2006:363:15:17:19').secs
+    tstuck2 = DateTime('2006:364:05:48:52').secs
+
+    times = msidset['4OHTRZ50'].times
+    stuck_on = ((times > tstuck1) & (times < tunstuck)) | (times > tstuck2)
+
+    return stuck_on
